@@ -98,19 +98,11 @@ class ProBlock(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size,stride, padding, bias)
-        #self.conv1_bn = nn.BatchNorm2d(conv_channels)
-        #self.conv2 = nn.Conv2d(conv_channels, conv_channels, kernel_size=3, padding=1, bias=True)
         self.relu = nn.ReLU(inplace=True)
-        #self.maxpool = nn.MaxPool2d(2, 2)
 
     def forward(self, input_batch):
         output = self.conv1(input_batch)
-        #output = self.relu(output)
-        #output = self.conv1_bn(output)
-        #output = self.conv2(output)
-        #output = self.relu(output)
 
-        #return self.maxpool(output)
         return self.relu(output)
 
 
