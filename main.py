@@ -46,12 +46,12 @@ class ProArgs:
         self.val_quant = 0.1
 
         # Hyper-parameters
-        self.img_size = 320
+        self.img_size = 500
         self.in_channel = 1
         self.conv_channels = 8
         self.num_classes = 4
         self.learning_rate = 1e-3
-        self.batch_size = 50
+        self.batch_size = 20
         self.num_epochs = 3
         self.num_workers = 0
 
@@ -85,58 +85,91 @@ class ProDataset(Dataset):
         if self.transform:
             img = self.transform(img)
         y = torch.tensor(self.values[index][1])
-        z = torch.tensor([self.values[index][2]])
-        #z = self.values[index][0]
-        return img, y,z
+        #z = torch.tensor([self.values[index][2]])
+        z = self.values[index][0]
+        return img, y, z
 
     def __len__(self):
         return len(self.indices) if self.train_set else len(self.values)
 
 
 class ProBlock(nn.Module):
-    def __init__(self, in_channels, conv_channels):
+    def __init__(self, in_channels, conv_channels,kernel_size,stride,padding,bias=True):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size=3, padding=1, bias=True)
+        self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size,stride, padding, bias)
+        #self.conv1_bn = nn.BatchNorm2d(conv_channels)
         #self.conv2 = nn.Conv2d(conv_channels, conv_channels, kernel_size=3, padding=1, bias=True)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(2, 2)
+        #self.maxpool = nn.MaxPool2d(2, 2)
 
     def forward(self, input_batch):
         output = self.conv1(input_batch)
-        output = self.relu(output)
+        #output = self.relu(output)
+        #output = self.conv1_bn(output)
         #output = self.conv2(output)
         #output = self.relu(output)
 
-        return self.maxpool(output)
+        #return self.maxpool(output)
+        return self.relu(output)
 
 
 class ProModel(nn.Module):
-    def __init__(self, in_channels=1, conv_channels=8):
+    def __init__(self, in_channels=1, conv_channels=15):
         super().__init__()
 
-        #self.tail_batchnorm = nn.BatchNorm2d(1)
+        self.block1 = ProBlock(in_channels, conv_channels, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block2 = ProBlock(conv_channels, conv_channels, kernel_size=3, stride=1, padding=0, bias=True)
 
-        self.block1 = ProBlock(in_channels, conv_channels)
-        self.block2 = ProBlock(conv_channels, conv_channels * 2)
-        self.block3 = ProBlock(conv_channels * 2, conv_channels * 4)
-        self.block4 = ProBlock(conv_channels * 4, conv_channels * 8)
+        self.block3 = ProBlock(conv_channels, conv_channels * 2, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block4 = ProBlock(conv_channels * 2, conv_channels * 2, kernel_size=3, stride=1, padding=0, bias=True)
 
-        self.head_linear = nn.Linear(25600, 4)
+        self.block5 = ProBlock(conv_channels * 2, conv_channels * 4, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block6 = ProBlock(conv_channels * 4, conv_channels * 4, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block7 = ProBlock(conv_channels * 4, conv_channels * 4, kernel_size=3, stride=1, padding=0, bias=True)
+
+        self.block8 = ProBlock(conv_channels * 4, conv_channels * 8, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block9 = ProBlock(conv_channels * 8, conv_channels * 8, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block10 = ProBlock(conv_channels * 8, conv_channels * 8, kernel_size=3, stride=1, padding=0, bias=True)
+
+        self.block11 = ProBlock(conv_channels * 8, conv_channels * 16, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block12 = ProBlock(conv_channels * 16, conv_channels * 16, kernel_size=3, stride=1, padding=0, bias=True)
+        self.block13 = ProBlock(conv_channels * 16, conv_channels * 16, kernel_size=3, stride=1, padding=0, bias=True)
+
+        self.maxpool = nn.MaxPool2d(2, 2)
+
+        self.head_linear = nn.Linear(24000, 24000)
+        self.head_linear2 = nn.Linear(24000, 4)
         self.head_softmax = nn.Softmax(dim=1)
 
     def forward(self, input_batch):
-        #bn_output = self.tail_batchnorm(input_batch)
-        #output = self.block1(bn_output)
-
         output = self.block1(input_batch)
         output = self.block2(output)
+        output = self.maxpool(output)
+
         output = self.block3(output)
         output = self.block4(output)
+        output = self.maxpool(output)
 
-        conv_flat = output.view(-1, 25600)
-        #conv_flat = output.view(output.size(0), -1)
+        output = self.block5(output)
+        output = self.block6(output)
+        output = self.block7(output)
+        output = self.maxpool(output)
+
+        output = self.block8(output)
+        output = self.block9(output)
+        output = self.block10(output)
+        output = self.maxpool(output)
+
+        output = self.block11(output)
+        output = self.block12(output)
+        output = self.block13(output)
+        output = self.maxpool(output)
+
+        conv_flat = output.view(-1, 24000)
+        # conv_flat = output.view(output.size(0), -1)
         linear_output = self.head_linear(conv_flat)
+        linear_output = self.head_linear2(linear_output)
 
         return linear_output, self.head_softmax(linear_output)
 
