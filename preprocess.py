@@ -2,8 +2,8 @@ import cv2 as cv
 import torch
 import pandas as pd
 import numpy as np
-import random
 import imgaug.augmenters as iaa
+import random
 
 
 def get_indices(series):
@@ -15,36 +15,6 @@ def get_indices(series):
     indices = cls0 * 90 + cls1 * 6 + cls2 + cls3[:7300]
     random.shuffle(indices)
     return indices
-
-
-def make_weights_for_balanced_classes(df, nclasses): # make a row with len similar to dataset where each value is the weight of the class of the specific row (the weight gives more power to the less dominant class)
-    count = [0] * nclasses
-    for i in df['class']:
-        count[i] += 1
-    weight_per_class = [0.] * nclasses
-    N = float(sum(count))
-    for i in range(nclasses):
-        weight_per_class[i] = N/float(count[i])
-    weight = [0] * len(df)
-    for idx, val in enumerate(df['class']):
-        weight[idx] = weight_per_class[val]
-    return torch.DoubleTensor(weight)
-
-
-def check_for_none_imgs(df,args):
-    temp_list = list()
-    for index,path in enumerate(df[args.img_col]):
-        img_path = args.images + path + '.jpg'
-        img = cv.imread(img_path)
-        if img is None:
-            print('Found a None type')
-            temp_list.append(img_path)
-        if index % 50 == 0:
-            print(f'Index number {index}')
-    if len(temp_list) != 0:
-        print(temp_list)
-    else:
-        print('Did not find any None Type')
 
 
 def split_data(df):
@@ -76,32 +46,37 @@ def normed_weights(df):
     return torch.FloatTensor([1 - (x / sum(w)) for x in w][::-1])
 
 
-def start(args):
-    df = make_ett(args)
-    train,val,test = split_data(df)
-    train,val = check_for_leakage(train, val,args)
-    train,test = check_for_leakage(train, test,args)
-    val,test = check_for_leakage(val, test,args)
-    train.drop(args.patients,inplace=True,axis=1)
-    val.drop(args.patients,inplace=True,axis=1)
-    test.drop(args.patients,inplace=True,axis=1)
-    return train.values, val.values, test.values, normed_weights(train)
+def make_ett_data(args):
+    df = pd.read_csv(args.csv)
+    df[args.labels] = df[args.ett].values.tolist()
+    df.drop(args.all_labels+[args.swan_ganz],axis=1,inplace=True)
+    df[args.labels] = [i + [1] if sum(i) == 0 else i + [0] for i in df[args.labels]]
+    df[args.cls] = [i.index(1) for i in df[args.labels]]
+    df.rename(columns={args.uid:'path'},inplace=True)
+    df['path'] = [args.image_path + i + '.jpg' for i in df['path']]
+    assert df.notnull().all().all()
+    df.sort_values(args.labels).reset_index(drop=True,inplace=True)
+    return df
 
 
 def aug_img(img):
     img = np.expand_dims(img, axis=0)
-    seq = iaa.Sequential([iaa.Fliplr(0.5), # horizontal flips
-                          iaa.Crop(percent=(0, 0.1)),
-                          iaa.Sometimes(0.5,iaa.GaussianBlur(sigma=(0, 0.5))),
-                          iaa.LinearContrast((0.75, 1.5)),
-                          iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5),
-                          iaa.Multiply((0.8, 1.2), per_channel=0.2),
-                          iaa.Affine(scale={"x": (0.9, 1.1), "y": (0.9, 1.1)},
-                                     translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
-                                     rotate=(-5, 5),
-                                     #shear=(-8, 8)
-                                     )],
-                         random_order=True)
+    one = iaa.OneOf([iaa.Affine(scale=(0.9,1.1),mode='constant'),
+                     iaa.Affine(translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},mode='constant'),
+                     iaa.Affine(rotate=(-5, 5),mode='constant'),
+                     iaa.Affine(shear=(-6, 6),mode='constant'),
+                     iaa.ScaleX((0.9, 1.1)),
+                     iaa.ScaleY((0.9, 1.1)),
+                     iaa.PerspectiveTransform(scale=(0.01, 0.05))])
+    two = iaa.OneOf([iaa.AdditiveGaussianNoise(scale=(0, 0.1*255)),
+                     iaa.AdditiveLaplaceNoise(scale=(0, 0.1 * 255)),
+                    iaa.Salt(0.05)])
+    three = iaa.OneOf([iaa.GaussianBlur(sigma=1.0),
+                        iaa.imgcorruptlike.Fog(severity=1),
+                        iaa.imgcorruptlike.Spatter(severity=1)])
+    simetimes2 = iaa.Sometimes(0.5, two)
+    simetimes3 = iaa.Sometimes(0.05,three)
+    seq = iaa.Sequential([one,simetimes2,simetimes3],random_order=True)
     images_aug = seq(images=img)
     return images_aug[0]
 
@@ -116,35 +91,16 @@ def fill(path,aug=False):
     img = cv.cvtColor(img,cv.COLOR_GRAY2RGB)
     if aug:
         img = aug_img(img)
-    #img1 = cv.resize(img, (int(img.shape[1] * 0.5),int(img.shape[0] * 0.5)),interpolation = cv.INTER_AREA)
-    #cv.imshow('Input', img1)
-    #cv.waitKey()
     return img
 
 
-def make_ett(args):
-    df = pd.read_csv(args.csv)
-    df[args.labels] = df[args.ett].values.tolist()
-    df.drop(args.all_labels+[args.swan_ganz],axis=1,inplace=True)
-    df[args.labels] = [i + [1] if sum(i) == 0 else i + [0] for i in df[args.labels]]
-    df[args.cls] = [i.index(1) for i in df[args.labels]]
-    df.rename(columns={args.uid:'path'},inplace=True)
-    df['path'] = [args.image_path + i + '.jpg' for i in df['path']]
-    assert df.notnull().all().all()
-    df.sort_values(args.labels).reset_index(drop=True,inplace=True)
-    return df
-
-
-def get_mean_std(loader):
-    channels_sum, channels_squared_sum, num_batches = 0,0,0
-    for data, _,_ in loader:
-        channels_sum += torch.mean(data, dim=[0,2,3])
-        channels_squared_sum += torch.mean(data**2, dim=[0,2,3])
-        num_batches +=1
-        print(num_batches)
-    mean = channels_sum/num_batches
-    std = (channels_squared_sum/num_batches - mean**2)**0.5
-    return mean, std
-
-#m = tensor([0.3165])
-#s = tensor([0.2770])
+def start(args):
+    df = make_ett_data(args)
+    train,val,test = split_data(df)
+    train,val = check_for_leakage(train, val,args)
+    train,test = check_for_leakage(train, test,args)
+    val,test = check_for_leakage(val, test,args)
+    train.drop(args.patients,inplace=True,axis=1)
+    val.drop(args.patients,inplace=True,axis=1)
+    test.drop(args.patients,inplace=True,axis=1)
+    return train.values, val.values, test.values, normed_weights(train)
