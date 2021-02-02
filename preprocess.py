@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import imgaug.augmenters as iaa
 import random
+import ast
 
 
 def get_indices(series):
@@ -42,20 +43,28 @@ def check_for_leakage(df1, df2,args):
 
 
 def normed_weights(df):
-    w = df.labels.value_counts().tolist()
+    w = df['class'].value_counts().tolist()
     return torch.FloatTensor([1 - (x / sum(w)) for x in w][::-1])
 
 
 def make_ett_data(args):
     df = pd.read_csv(args.csv)
     df[args.labels] = df[args.ett].values.tolist()
-    df.drop(args.all_labels+[args.swan_ganz],axis=1,inplace=True)
-    df[args.labels] = [i + [1] if sum(i) == 0 else i + [0] for i in df[args.labels]]
-    df[args.cls] = [i.index(1) for i in df[args.labels]]
-    df.rename(columns={args.uid:'path'},inplace=True)
+    df.set_index(args.uid, inplace=True)
+    df_annot = pd.read_csv(args.csv_annotations)
+    df_annot = df_annot[df_annot[args.labels[:-1]].isin(args.ett)]
+    df_annot.set_index(args.uid, inplace=True)
+    df = pd.concat([df, df_annot], axis=1)
+    df.reset_index(inplace=True)
+    df[args.cls] = [i.index(1) if sum(i) == 1 else 3 for i in df[args.labels]]
+    df[args.annotations] = [np.array(ast.literal_eval(i)[0])
+                                  if type(i) != float else [] for i in df[args.data]]
+    df.rename(columns={'index': 'path'}, inplace=True)
+    df.drop(args.all_labels + [args.swan_ganz] + ['label', 'labels','data'], axis=1, inplace=True)
+    df['has_bool'] = [1 if i in [0,1,2] else 0 for i in df[args.cls]]
     df['path'] = [args.image_path + i + '.jpg' for i in df['path']]
     assert df.notnull().all().all()
-    df.sort_values(args.labels).reset_index(drop=True,inplace=True)
+    df.sort_values(args.cls).reset_index(drop=True,inplace=True)
     return df
 
 

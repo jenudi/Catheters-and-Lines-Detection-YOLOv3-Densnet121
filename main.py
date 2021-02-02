@@ -32,7 +32,7 @@ class ProDataset(Dataset):
         if train_set:
             self.indices = get_indices(values[:, 2])
 
-    def __getitem__(self, index):  # 0: path, 1: labels, 2: cls
+    def __getitem__(self, index):  # 0: path, 1: cls, 2: annot, 3: has_bool
         if self.train_set:
             augmentations = False
             index = random.sample(self.indices, 1)[0]
@@ -49,9 +49,10 @@ class ProDataset(Dataset):
             print(index)
         if self.transform:
             img = self.transform(img)
-        y = torch.tensor(self.values[index][1])
-        z = torch.tensor([self.values[index][2]])
-        return img, y, z
+        cls = torch.tensor(self.values[index][1])
+        annot = torch.tensor([self.values[index][2]])
+        has_bool = torch.tensor([self.values[index][3]])
+        return img, cls, annot, has_bool
 
     def __len__(self):
         return len(self.indices) if self.train_set else len(self.values)
@@ -176,21 +177,20 @@ class Ranzcr:
                            batch_tup,
                            batch_size,
                            metrics_g):
-
-        input_t, label_t, cls0 = batch_tup
-        cls1 = torch.reshape(cls0, (-1,))
+        input_t, cls_t, annot, has_bool = batch_tup
+        cls_t = torch.reshape(cls_t, (-1,))
         input_g = input_t.to(self.device,
                              non_blocking=True)
-        cls1 = cls1.to(self.device,
+        cls_g = cls_t.to(self.device,
                        non_blocking=True)
         logits_g, probability_g = self.model(input_g)
         loss_func = nn.CrossEntropyLoss(reduction='none')  # weight=self.class_weights,
 
-        loss_g = loss_func(logits_g, cls1)
+        loss_g = loss_func(logits_g, cls_g)
 
         start_ndx = batch_ndx * batch_size
-        end_ndx = start_ndx + label_t.size(0)
-        metrics_g[METRICS_LABEL_NDX, start_ndx:end_ndx] = cls1.detach()
+        end_ndx = start_ndx + cls_g.size(0)
+        metrics_g[METRICS_LABEL_NDX, start_ndx:end_ndx] = cls_g.detach()
         metrics_g[METRICS_PRED_NDX, start_ndx:end_ndx] = torch.max(probability_g, 1)[1].detach()
         metrics_g[METRICS_LOSS_NDX, start_ndx:end_ndx] = loss_g.detach()
 
@@ -303,6 +303,6 @@ class Ranzcr:
             self.val_writer = SummaryWriter(log_dir=log_dir + '-val_cls-')
 
 
-training = Ranzcr(args).main()
+training = Ranzcr(args)
 # tensorboard --logdir=runs
 # %%
