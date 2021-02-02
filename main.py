@@ -13,7 +13,7 @@ from args import ProArgs
 # import torch.cuda
 
 # %%
-args = ProArgs(img_size=320,learning_rate = 1e-3,batch_size = 20,num_epochs=5)
+args = ProArgs(img_size=320,learning_rate = 1e-3,batch_size =20,num_epochs=20)
 
 
 METRICS_LABEL_NDX = 0
@@ -30,7 +30,7 @@ class ProDataset(Dataset):
         self.train_set = train_set
         self.indices_to_aug = list()
         if train_set:
-            self.indices = get_indices(values[:, 2])
+            self.indices = get_indices(values[:, 1])
 
     def __getitem__(self, index):  # 0: path, 1: cls, 2: annot, 3: has_bool
         if self.train_set:
@@ -38,7 +38,7 @@ class ProDataset(Dataset):
             index = random.sample(self.indices, 1)[0]
             self.indices.remove(index)
             if index not in self.indices_to_aug and\
-                    (self.values[index][2] == 0 or self.values[index][2] == 1):
+                    (self.values[index][1] == 0 or self.values[index][1] == 1):
                 self.indices_to_aug.append(index)
             else:
                 augmentations = True
@@ -52,7 +52,7 @@ class ProDataset(Dataset):
         cls = torch.tensor(self.values[index][1])
         annot = torch.tensor([self.values[index][2]])
         has_bool = torch.tensor([self.values[index][3]])
-        return img, cls, annot, has_bool
+        return img, cls, has_bool #annot,
 
     def __len__(self):
         return len(self.indices) if self.train_set else len(self.values)
@@ -71,6 +71,7 @@ class Ranzcr:
         self.trn_writer = None
         self.val_writer = None
         self.totalTrainingSamples_count = 0
+        self.training_loss = 0
 
     def model(self):
         model = ProModel()
@@ -125,10 +126,12 @@ class Ranzcr:
         self.initTensorboardWriters()
         train_dl, val_dl = self.init_dls()
         for epoch_ndx in range(1, self.args.num_epochs + 1):
-            trnMetrics_t = self.training(epoch_ndx, train_dl)
-            self.log_metrics(epoch_ndx, 'trn', trnMetrics_t)
-            valMetrics_t = self.validation(epoch_ndx, val_dl)
-            self.log_metrics(epoch_ndx, 'val', valMetrics_t)
+            if epoch_ndx % 6 == 5:
+                valMetrics_t = self.validation(epoch_ndx, val_dl)
+                self.log_metrics(epoch_ndx, 'val', valMetrics_t)
+            else:
+                trnMetrics_t = self.training(epoch_ndx, train_dl)
+                self.log_metrics(epoch_ndx, 'trn', trnMetrics_t)
         print("Finished: Ranzcr.main()")
 
     def training(self, epoch_ndx, train_dl):
@@ -146,8 +149,13 @@ class Ranzcr:
                                            batch_tup,
                                            train_dl.batch_size,
                                            trnMetrics_g)
+            self.training_loss += loss
+            if batch_ndx % 6 == 5:
+                print(f"Set: train, "
+                      f"Epoch: {epoch_ndx}, "
+                      f"Batch: {batch_ndx}, "
+                      f"loss: {self.training_loss/self.totalTrainingSamples_count}")
 
-            print(f"batch: {batch_ndx}, loss: {loss}")
             loss.backward()
             self.optimizer.step()
         self.totalTrainingSamples_count += len(train_dl.dataset)
@@ -166,10 +174,14 @@ class Ranzcr:
                                          start_ndx=val_dl.num_workers)
 
             for batch_ndx, batch_tup in batch_iter:
-                self.compute_batch_loss(batch_ndx,
-                                        batch_tup,
-                                        val_dl.batch_size,
-                                        valMetrics_g)
+                loss = self.compute_batch_loss(batch_ndx,
+                                                batch_tup,
+                                                val_dl.batch_size,
+                                                valMetrics_g)
+                if batch_ndx % 6 == 5:
+                    print(f"Set: train, Epoch: {epoch_ndx}, "
+                          f"Batch: {batch_ndx}, loss: "
+                          f"{loss/self.totalTrainingSamples_count}")
 
         return valMetrics_g.to('cpu')
 
@@ -177,7 +189,7 @@ class Ranzcr:
                            batch_tup,
                            batch_size,
                            metrics_g):
-        input_t, cls_t, annot, has_bool = batch_tup
+        input_t, cls_t,  has_bool = batch_tup #annot,
         cls_t = torch.reshape(cls_t, (-1,))
         input_g = input_t.to(self.device,
                              non_blocking=True)
@@ -303,6 +315,7 @@ class Ranzcr:
             self.val_writer = SummaryWriter(log_dir=log_dir + '-val_cls-')
 
 
-training = Ranzcr(args)
+if __name__ == '__main__':
+    training = Ranzcr(args)
 # tensorboard --logdir=runs
 # %%
