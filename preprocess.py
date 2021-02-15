@@ -5,6 +5,14 @@ import numpy as np
 import imgaug.augmenters as iaa
 import random
 import ast
+import matplotlib.pyplot as plt
+from functools import lru_cache
+
+
+def show(img):
+    plt.imshow(img)
+    plt.xticks([]), plt.yticks([])
+    plt.show()
 
 
 def get_indices(series):
@@ -57,7 +65,7 @@ def make_ett_data(args):
     df = pd.concat([df, df_annot], axis=1)
     df.reset_index(inplace=True)
     df[args.cls] = [i.index(1) if sum(i) == 1 else 3 for i in df[args.labels]]
-    df[args.annotations] = [np.array(ast.literal_eval(i)[0])
+    df[args.annotations] = [np.array(ast.literal_eval(i))
                                   if type(i) != float else [] for i in df[args.data]]
     df.rename(columns={'index': 'path'}, inplace=True)
     df.drop(args.all_labels + [args.swan_ganz] + ['label', 'labels','data'], axis=1, inplace=True)
@@ -70,37 +78,45 @@ def make_ett_data(args):
 
 def aug_img(img):
     img = np.expand_dims(img, axis=0)
-    one = iaa.OneOf([iaa.Affine(scale=(0.9,1.1),mode='constant'),
-                     iaa.Affine(translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},mode='constant'),
-                     iaa.Affine(rotate=(-5, 5),mode='constant'),
-                     iaa.Affine(shear=(-6, 6),mode='constant'),
-                     iaa.ScaleX((0.9, 1.1)),
+    one = iaa.OneOf([
+                     iaa.Affine(rotate=(-10, 10),mode='constant'),
+                     iaa.ScaleX((0.7, 1.3)),
                      iaa.ScaleY((0.9, 1.1)),
-                     iaa.PerspectiveTransform(scale=(0.01, 0.05))])
-    two = iaa.OneOf([iaa.AdditiveGaussianNoise(scale=(0, 0.1*255)),
-                     iaa.AdditiveLaplaceNoise(scale=(0, 0.1 * 255)),
-                    iaa.Salt(0.05)])
-    three = iaa.OneOf([iaa.GaussianBlur(sigma=1.0),
-                        iaa.imgcorruptlike.Fog(severity=1),
-                        iaa.imgcorruptlike.Spatter(severity=1)])
-    simetimes2 = iaa.Sometimes(0.5, two)
-    simetimes3 = iaa.Sometimes(0.05,three)
-    seq = iaa.Sequential([one,simetimes2,simetimes3],random_order=True)
+                     iaa.PerspectiveTransform(scale=(0.01, 0.1)),
+                     ])
+    two = iaa.OneOf([
+                       iaa.GaussianBlur(sigma=(0.0, 3.0)),
+                        iaa.LinearContrast((0.4, 1.6)),
+                       ])
+    simetimes1 = iaa.Sometimes(0.25, iaa.Fliplr(1))
+    simetimes2 = iaa.Sometimes(0.5,two)
+    seq = iaa.Sequential([one,simetimes1,simetimes2],random_order=True)
     images_aug = seq(images=img)
     return images_aug[0]
 
 
-def fill(path,aug=False):
-    img = cv.imread(path,0)
-    _, img = cv.threshold(img,50,255,cv.THRESH_TOZERO)
-    img = cv.equalizeHist(img)
-    img = cv.filter2D(img, -1, np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]]))
-    middle = img.shape[1] // 2
-    img = img[:1400,middle-600:middle+600]
-    img = cv.cvtColor(img,cv.COLOR_GRAY2RGB)
-    if aug:
-        img = aug_img(img)
-    return img
+
+def show_annotations(df,index):
+    img = cv.imread(df[index,0])
+    if len(df[index,2]) is 0:
+        print('No annot')
+        return
+    temp_list = [np.array([1,0]), np.array([-1,0]), np.array([0,-1]), np.array([0,1]),
+                 np.array([1,1]), np.array([-1,-1]),np.array([1,-1]), np.array([-1,1]),
+                 np.array([0,0]), np.array([2,0]), np.array([-2,0]), np.array([0,-2]),
+                 np.array([0,2]), np.array([2,2]), np.array([-2,-2]),np.array([2,-2]),
+                 np.array([-2,2]),np.array([-2,-1]),np.array([-2,1]),np.array([2,-1]),
+                 np.array([2,1]),np.array([1,-2]),np.array([1,2]),np.array([-1,-2]),np.array([-1,2])]
+    extand_annotations = [i + df[index,2] for i in temp_list]
+    for k in extand_annotations:
+        for y,x in k.tolist():
+            try:
+                img[x][y] = (255,255,0)
+            except IndexError:
+                continue
+    plt.imshow(img)
+    plt.xticks([]), plt.yticks([])
+    plt.show()
 
 
 def start(args):
@@ -113,3 +129,28 @@ def start(args):
     val.drop(args.patients,inplace=True,axis=1)
     test.drop(args.patients,inplace=True,axis=1)
     return train.values, val.values, test.values, normed_weights(train)
+
+
+#@lru_cache(maxsize=1)
+def fill(path,aug=False):
+    img = cv.imread(path)
+    if aug:
+        img = aug_img(img)
+    img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    bin_img = img[0:2000, 700:-700]
+    _, bin_img = cv.threshold(bin_img, 120, 255, cv.THRESH_BINARY)
+    bin_img = cv.resize(bin_img,
+                    (int(bin_img.shape[1] * 0.20), int(bin_img.shape[0] * 0.20)),
+                    interpolation=cv.INTER_AREA)
+    temp_list = [sum(bin_img[:,j]) for j in range(bin_img.shape[1])]
+    temp_index = (5 * temp_list.index(max(temp_list))) + 700
+    img = img[100:1200,temp_index-550:temp_index+550]
+    _, img = cv.threshold(img,50,255,cv.THRESH_TOZERO)
+    img = cv.equalizeHist(img)
+    img = cv.filter2D(img, -1, np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]]))
+    img[:, :275] = 0
+    img[:, 825:] = 0
+    img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+    #show(img)
+    return img
+

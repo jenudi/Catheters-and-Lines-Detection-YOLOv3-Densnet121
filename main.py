@@ -7,13 +7,12 @@ import torchvision.transforms as transforms
 import datetime
 import time
 from torch.utils.tensorboard import SummaryWriter
-import os
 from base_CNN import ProModel
 from args import ProArgs
-# import torch.cuda
-
+import os
+import torch.cuda
+args = ProArgs(img_size=284,learning_rate = 1e-5,batch_size =80,num_epochs=30)
 # %%
-args = ProArgs(img_size=320,learning_rate = 1e-3,batch_size =20,num_epochs=20)
 
 
 METRICS_LABEL_NDX = 0
@@ -29,22 +28,23 @@ class ProDataset(Dataset):
         self.transform = transform
         self.train_set = train_set
         self.indices_to_aug = list()
-        if train_set:
-            self.indices = get_indices(values[:, 1])
+        #if train_set:
+         #   self.indices = get_indices(values[:, 1])
 
     def __getitem__(self, index):  # 0: path, 1: cls, 2: annot, 3: has_bool
-        if self.train_set:
-            augmentations = False
-            index = random.sample(self.indices, 1)[0]
-            self.indices.remove(index)
-            if index not in self.indices_to_aug and\
-                    (self.values[index][1] == 0 or self.values[index][1] == 1):
-                self.indices_to_aug.append(index)
-            else:
-                augmentations = True
-            img = fill(path=self.values[index][0], aug=augmentations)
-        else:
-            img = fill(self.values[index][0])
+        #if self.train_set:
+         #   augmentations = False
+          #  index = random.sample(self.indices, 1)[0]
+           # self.indices.remove(index)
+            #if index not in self.indices_to_aug and\
+             #       (self.values[index][1] == 0 or self.values[index][1] == 1):
+              #  self.indices_to_aug.append(index)
+            #else:
+             #   augmentations = True
+            #img = fill(path=self.values[index][0], aug=augmentations)
+        #else:
+         #   img = fill(self.values[index][0])
+        img = fill(self.values[index][0])
         if img is None:
             print(index)
         if self.transform:
@@ -55,7 +55,8 @@ class ProDataset(Dataset):
         return img, cls, has_bool #annot,
 
     def __len__(self):
-        return len(self.indices) if self.train_set else len(self.values)
+        return len(self.values)
+        #return len(self.indices) if self.train_set else len(self.values)
 
 
 class Ranzcr:
@@ -71,7 +72,9 @@ class Ranzcr:
         self.trn_writer = None
         self.val_writer = None
         self.totalTrainingSamples_count = 0
-        self.training_loss = 0
+        self.training_loss = None
+        self.val_loss = None
+        #self.training_sampels = 0
 
     def model(self):
         model = ProModel()
@@ -83,7 +86,7 @@ class Ranzcr:
         return model
 
     def optimizer(self):
-        return optim.SGD(self.model.parameters(), lr=self.args.learning_rate, momentum=0.99)
+        return optim.SGD(self.model.parameters(), lr=self.args.learning_rate)#, momentum=0.99
 
     def init_dls(self):
         batch_size = self.args.batch_size
@@ -97,28 +100,19 @@ class Ranzcr:
                                                                   transforms.Grayscale(num_output_channels=1),
                                                                   transforms.ToTensor(), ]))
         # transforms.Normalize([0.3165], [0.2770])]))
-
         train_data_loader = DataLoader(train_data_set,
                                        batch_size=batch_size,
                                        shuffle=True,
                                        num_workers=self.args.num_workers,
                                        pin_memory=self.use_cuda)
-
-        val_data_set = ProDataset(values=val_set,
-                                  train_set=False,
+        val_data_set = ProDataset(values=val_set,train_set=False,
                                   transform=transforms.Compose([transforms.ToPILImage(),
                                                                 transforms.Resize(
                                                                     size=(self.args.img_size, self.args.img_size)),
                                                                 transforms.Grayscale(num_output_channels=1),
                                                                 transforms.ToTensor(), ]))
         # transforms.Normalize([0.3165], [0.2770])]))
-
-        val_data_loader = DataLoader(val_data_set,
-                                     batch_size=batch_size,
-                                     shuffle=False,
-                                     num_workers=self.args.num_workers,
-                                     pin_memory=self.use_cuda)
-
+        val_data_loader = DataLoader(val_data_set,batch_size=batch_size,shuffle=False,num_workers=self.args.num_workers,pin_memory=self.use_cuda)
         return train_data_loader, val_data_loader
 
     def main(self):
@@ -136,68 +130,43 @@ class Ranzcr:
 
     def training(self, epoch_ndx, train_dl):
         self.model.train()
-        trnMetrics_g = torch.zeros(METRICS_SIZE,
-                                   len(train_dl.dataset),
-                                   device=self.device)
-        batch_iter = self.estimation(train_dl,
-                                     desc_str=f"{epoch_ndx} Training",
-                                     start_ndx=train_dl.num_workers)
-
+        trnMetrics_g = torch.zeros(METRICS_SIZE,len(train_dl.dataset),device=self.device)
+        batch_iter = self.estimation(train_dl,desc_str=f"{epoch_ndx} Training",start_ndx=train_dl.num_workers)
+        self.training_loss = 0.0
         for batch_ndx, batch_tup in batch_iter:
             self.optimizer.zero_grad()
-            loss = self.compute_batch_loss(batch_ndx,
-                                           batch_tup,
-                                           train_dl.batch_size,
-                                           trnMetrics_g)
-            self.training_loss += loss
+            loss = self.compute_batch_loss(batch_ndx,batch_tup,train_dl.batch_size,trnMetrics_g)
             if batch_ndx % 6 == 5:
-                print(f"Set: train, "
-                      f"Epoch: {epoch_ndx}, "
-                      f"Batch: {batch_ndx}, "
-                      f"loss: {self.training_loss/self.totalTrainingSamples_count}")
-
+                print(f"batch: {batch_ndx}")
+            self.training_loss += loss
             loss.backward()
             self.optimizer.step()
+            print(f"epoch: {epoch_ndx}, loss: {self.training_loss/len(train_dl)}")
         self.totalTrainingSamples_count += len(train_dl.dataset)
-
         return trnMetrics_g.to('cpu')
 
     def validation(self, epoch_ndx, val_dl):
         with torch.no_grad():
             self.model.eval()
-            valMetrics_g = torch.zeros(METRICS_SIZE,
-                                       len(val_dl.dataset),
-                                       device=self.device)
-
-            batch_iter = self.estimation(val_dl,
-                                         desc_str=f"{epoch_ndx} Validation ",
-                                         start_ndx=val_dl.num_workers)
-
+            valMetrics_g = torch.zeros(METRICS_SIZE,len(val_dl.dataset),device=self.device)
+            batch_iter = self.estimation(val_dl,desc_str=f"{epoch_ndx} Validation ",start_ndx=val_dl.num_workers)
+            self.val_loss = 0.0
             for batch_ndx, batch_tup in batch_iter:
-                loss = self.compute_batch_loss(batch_ndx,
-                                                batch_tup,
-                                                val_dl.batch_size,
-                                                valMetrics_g)
+                loss = self.compute_batch_loss(batch_ndx,batch_tup,val_dl.batch_size,valMetrics_g)
                 if batch_ndx % 6 == 5:
-                    print(f"Set: train, Epoch: {epoch_ndx}, "
-                          f"Batch: {batch_ndx}, loss: "
-                          f"{loss/self.totalTrainingSamples_count}")
-
+                    print(f"batch: {batch_ndx}")
+                self.val_loss += loss
+            print(f"epoch: {epoch_ndx}, loss: {self.training_loss / len(val_dl)}")
         return valMetrics_g.to('cpu')
 
-    def compute_batch_loss(self, batch_ndx,
-                           batch_tup,
-                           batch_size,
-                           metrics_g):
-        input_t, cls_t,  has_bool = batch_tup #annot,
+    def compute_batch_loss(self, batch_ndx,batch_tup,batch_size,metrics_g):
+        input_t, cls_t, has_bool = batch_tup
         cls_t = torch.reshape(cls_t, (-1,))
-        input_g = input_t.to(self.device,
-                             non_blocking=True)
-        cls_g = cls_t.to(self.device,
-                       non_blocking=True)
-        logits_g, probability_g = self.model(input_g)
-        loss_func = nn.CrossEntropyLoss(reduction='none')  # weight=self.class_weights,
+        input_g = input_t.to(self.device,non_blocking=True)
+        cls_g = cls_t.to(self.device,non_blocking=True)
 
+        logits_g, probability_g = self.model(input_g)
+        loss_func = nn.CrossEntropyLoss(weight=self.class_weights,reduction='none')  # weight=self.class_weights,
         loss_g = loss_func(logits_g, cls_g)
 
         start_ndx = batch_ndx * batch_size
@@ -205,11 +174,9 @@ class Ranzcr:
         metrics_g[METRICS_LABEL_NDX, start_ndx:end_ndx] = cls_g.detach()
         metrics_g[METRICS_PRED_NDX, start_ndx:end_ndx] = torch.max(probability_g, 1)[1].detach()
         metrics_g[METRICS_LOSS_NDX, start_ndx:end_ndx] = loss_g.detach()
-
         return loss_g.mean()
 
     def log_metrics(self, epoch_ndx, mode_str, metrics_t):
-
         cls0_label_mask = metrics_t[METRICS_LABEL_NDX] == 0
         cls1_label_mask = metrics_t[METRICS_LABEL_NDX] == 1
         cls2_label_mask = metrics_t[METRICS_LABEL_NDX] == 2
@@ -316,6 +283,33 @@ class Ranzcr:
 
 
 if __name__ == '__main__':
-    training = Ranzcr(args)
+    training = Ranzcr(args).main()
 # tensorboard --logdir=runs
 # %%
+
+import os
+import torch
+import torch.distributed as dist
+from torch.multiprocessing import Process
+
+
+def run(rank, size):
+    pass
+
+def init_process(rank, size, fn, backend='gloo'):
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '29500'
+    dist.init_process_group(backend, rank=rank, world_size=size)
+    fn(rank, size)
+
+
+if __name__ == "__main__":
+    size = 2
+    processes = []
+    for rank in range(size):
+        p = Process(target=init_process, args=(rank, size, run))
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()

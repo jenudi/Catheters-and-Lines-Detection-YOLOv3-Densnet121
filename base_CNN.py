@@ -11,12 +11,12 @@ class ProBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_channels,
                                conv_channels,
                                kernel_size=3,
-                               padding=1,
+                               padding=0,
                                bias=True)
         self.conv2 = nn.Conv2d(conv_channels,
                                conv_channels,
                                kernel_size=3,
-                               padding=1,
+                               padding=0,
                                bias=True)
         self.maxpool = nn.MaxPool2d(2, 2)
 
@@ -40,11 +40,14 @@ class ProModel(nn.Module):
                                conv_channels * 4)
         self.block4 = ProBlock(conv_channels * 4,
                                conv_channels * 8)
+        #self.block5 = ProBlock(conv_channels * 8,
+         #                      conv_channels * 16)
 
         self.flat = nn.Flatten()
-        self.head_linear = nn.Linear(25600, 4)
+        self.head_linear = nn.Linear(12544, 4)
+
         self.head_softmax = nn.Softmax(dim=1)
-        self._init_weights()
+        #self._init_weights()
 
     def forward(self, input):
 
@@ -53,10 +56,10 @@ class ProModel(nn.Module):
         x = self.block2(x)
         x = self.block3(x)
         x = self.block4(x)
+        #x = self.block5(x)
 
         conv_flat = self.flat(x)
         linear_output = self.head_linear(conv_flat)
-
         return linear_output, self.head_softmax(linear_output)
 
     def _init_weights(self):
