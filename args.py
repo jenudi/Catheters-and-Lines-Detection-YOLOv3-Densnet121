@@ -1,5 +1,5 @@
 class ProArgs:
-    def __init__(self, data_path='../../data/',img_size=320,learning_rate = 1e-3,batch_size = 20,num_epochs=5):
+    def __init__(self, data_path='../../data/',img_size=320,learning_rate = 1e-3,batch_size = 20,num_epochs=5,model=None):
         self.data_path = data_path
         self.csv = self.data_path + 'train.csv'
         self.csv_annotations = self.data_path + 'train_annotations.csv'
@@ -18,9 +18,6 @@ class ProArgs:
                            'CVC - Borderline', 'CVC - Normal']
         self.ett = ['ETT - Abnormal', 'ETT - Borderline', 'ETT - Normal']
 
-        # Data Split
-        self.test_quant = 0.1
-        self.val_quant = 0.1
 
         # Hyper-parameters
         self.img_size = img_size
@@ -31,5 +28,4 @@ class ProArgs:
         self.batch_size = batch_size
         self.num_epochs = num_epochs
         self.num_workers = 0
-
-
+        self.model = model

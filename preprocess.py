@@ -6,7 +6,6 @@ import imgaug.augmenters as iaa
 import random
 import ast
 import matplotlib.pyplot as plt
-from functools import lru_cache
 
 
 def show(img):
@@ -27,8 +26,8 @@ def get_indices(series):
 
 
 def split_data(df):
-    val_indexes = [index for index in range(len(df)) if index % 9 == 0]
-    test_indexes = [index for index in range(len(df)) if index % 10 == 0]
+    val_indexes = [index for index in range(len(df)) if index % 5 == 0]
+    test_indexes = [index for index in range(len(df)) if index % 6 == 0]
     train = df.drop(index=val_indexes+test_indexes)
     train.reset_index(drop=True,inplace=True)
     val = df.iloc[val_indexes,:]
@@ -95,30 +94,6 @@ def aug_img(img):
     return images_aug[0]
 
 
-
-def show_annotations(df,index):
-    img = cv.imread(df[index,0])
-    if len(df[index,2]) is 0:
-        print('No annot')
-        return
-    temp_list = [np.array([1,0]), np.array([-1,0]), np.array([0,-1]), np.array([0,1]),
-                 np.array([1,1]), np.array([-1,-1]),np.array([1,-1]), np.array([-1,1]),
-                 np.array([0,0]), np.array([2,0]), np.array([-2,0]), np.array([0,-2]),
-                 np.array([0,2]), np.array([2,2]), np.array([-2,-2]),np.array([2,-2]),
-                 np.array([-2,2]),np.array([-2,-1]),np.array([-2,1]),np.array([2,-1]),
-                 np.array([2,1]),np.array([1,-2]),np.array([1,2]),np.array([-1,-2]),np.array([-1,2])]
-    extand_annotations = [i + df[index,2] for i in temp_list]
-    for k in extand_annotations:
-        for y,x in k.tolist():
-            try:
-                img[x][y] = (255,255,0)
-            except IndexError:
-                continue
-    plt.imshow(img)
-    plt.xticks([]), plt.yticks([])
-    plt.show()
-
-
 def start(args):
     df = make_ett_data(args)
     train,val,test = split_data(df)
@@ -131,7 +106,6 @@ def start(args):
     return train.values, val.values, test.values, normed_weights(train)
 
 
-#@lru_cache(maxsize=1)
 def fill(path,aug=False):
     img = cv.imread(path)
     if aug:
@@ -145,12 +119,9 @@ def fill(path,aug=False):
     temp_list = [sum(bin_img[:,j]) for j in range(bin_img.shape[1])]
     temp_index = (5 * temp_list.index(max(temp_list))) + 700
     img = img[100:1200,temp_index-550:temp_index+550]
-    _, img = cv.threshold(img,50,255,cv.THRESH_TOZERO)
-    img = cv.equalizeHist(img)
-    img = cv.filter2D(img, -1, np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]]))
-    img[:, :275] = 0
-    img[:, 825:] = 0
+    img[:, :200] = 0
+    img[:, 900:] = 0
     img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
-    #show(img)
     return img
+
 

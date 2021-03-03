@@ -1,17 +1,18 @@
 # Imports
 from preprocess import *
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
+from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 import torchvision.transforms as transforms
 import datetime
-import time
 from torch.utils.tensorboard import SummaryWriter
-from base_CNN import ProModel
-from args import ProArgs
+from Densenet121 import Densenet, clac_param
+from args import *
 import os
 import torch.cuda
-args = ProArgs(img_size=284,learning_rate = 1e-5,batch_size =80,num_epochs=30)
+clac_param(Densenet())
+args = ProArgs(img_size=224,batch_size = 150,num_epochs=30,model=Densenet(),learning_rate=0.0001, momentum=0.9)
+#python -m tensorboard.main --logdir=runs
 # %%
 
 
@@ -27,36 +28,22 @@ class ProDataset(Dataset):
         self.values = values
         self.transform = transform
         self.train_set = train_set
-        self.indices_to_aug = list()
-        #if train_set:
-         #   self.indices = get_indices(values[:, 1])
 
-    def __getitem__(self, index):  # 0: path, 1: cls, 2: annot, 3: has_bool
-        #if self.train_set:
-         #   augmentations = False
-          #  index = random.sample(self.indices, 1)[0]
-           # self.indices.remove(index)
-            #if index not in self.indices_to_aug and\
-             #       (self.values[index][1] == 0 or self.values[index][1] == 1):
-              #  self.indices_to_aug.append(index)
-            #else:
-             #   augmentations = True
-            #img = fill(path=self.values[index][0], aug=augmentations)
-        #else:
-         #   img = fill(self.values[index][0])
-        img = fill(self.values[index][0])
+    def __getitem__(self, index):  # 0: path, 1: cls, 2: annot, 3: has_bool 4: aug
+        if self.train_set and self.values[index][4] == 1:
+            img = fill(self.values[index][0], aug=True)
+        else:
+            img = fill(self.values[index][0], aug=False)
         if img is None:
             print(index)
         if self.transform:
             img = self.transform(img)
         cls = torch.tensor(self.values[index][1])
-        annot = torch.tensor([self.values[index][2]])
         has_bool = torch.tensor([self.values[index][3]])
-        return img, cls, has_bool #annot,
+        return img, cls, has_bool
 
     def __len__(self):
         return len(self.values)
-        #return len(self.indices) if self.train_set else len(self.values)
 
 
 class Ranzcr:
@@ -74,10 +61,11 @@ class Ranzcr:
         self.totalTrainingSamples_count = 0
         self.training_loss = None
         self.val_loss = None
-        #self.training_sampels = 0
+        self.training_sampels = 0
+        self.num_workers = 0
 
     def model(self):
-        model = ProModel()
+        model = args.model
         if self.use_cuda:
             print(f"Using CUDA; {torch.cuda.device_count()} devices.")
             if torch.cuda.device_count() > 1:
@@ -85,8 +73,16 @@ class Ranzcr:
             model = model.to(self.device)
         return model
 
+    def lr_schedule(self,epoch):
+      if 4 < epoch <= 7:
+        self.args.learning_rate = 0.00005
+      elif 7 < epoch <= 11:
+        self.args.learning_rate = 0.000025
+      elif epoch > 11:
+        self.args.learning_rate = 0.0000125
+
     def optimizer(self):
-        return optim.SGD(self.model.parameters(), lr=self.args.learning_rate)#, momentum=0.99
+        return optim.SGD(self.model.parameters(), lr=self.args.learning_rate, momentum=0.99,weight_decay=0.1)
 
     def init_dls(self):
         batch_size = self.args.batch_size
@@ -97,30 +93,40 @@ class Ranzcr:
                                     transform=transforms.Compose([transforms.ToPILImage(),
                                                                   transforms.Resize(
                                                                       size=(self.args.img_size, self.args.img_size)),
-                                                                  transforms.Grayscale(num_output_channels=1),
+                                                                  #transforms.Grayscale(num_output_channels=1),
                                                                   transforms.ToTensor(), ]))
         # transforms.Normalize([0.3165], [0.2770])]))
         train_data_loader = DataLoader(train_data_set,
                                        batch_size=batch_size,
                                        shuffle=True,
-                                       num_workers=self.args.num_workers,
+                                       num_workers=self.num_workers,
                                        pin_memory=self.use_cuda)
         val_data_set = ProDataset(values=val_set,train_set=False,
                                   transform=transforms.Compose([transforms.ToPILImage(),
                                                                 transforms.Resize(
                                                                     size=(self.args.img_size, self.args.img_size)),
-                                                                transforms.Grayscale(num_output_channels=1),
+                                                                #transforms.Grayscale(num_output_channels=1),
                                                                 transforms.ToTensor(), ]))
         # transforms.Normalize([0.3165], [0.2770])]))
-        val_data_loader = DataLoader(val_data_set,batch_size=batch_size,shuffle=False,num_workers=self.args.num_workers,pin_memory=self.use_cuda)
+        val_data_loader = DataLoader(val_data_set,batch_size=batch_size,shuffle=False,num_workers=self.num_workers,pin_memory=self.use_cuda)
         return train_data_loader, val_data_loader
 
-    def main(self):
-        print('Starting Ranzcr.main()')
+    def main(self,continue_training=False,decay_learning=False):
+        if continue_training:
+            try:
+                self.model.load_state_dict(torch.load('cnn_model.pth'))
+                print('Loaded model for training')
+            except FileNotFoundError:
+                print('File Not Found')
+                return
+        else:
+            print('Starting Ranzcr.main()')
         self.initTensorboardWriters()
         train_dl, val_dl = self.init_dls()
         for epoch_ndx in range(1, self.args.num_epochs + 1):
-            if epoch_ndx % 6 == 5:
+            if decay_learning:
+              self.lr_schedule(epoch_ndx)
+            if epoch_ndx % 4 == 3:
                 valMetrics_t = self.validation(epoch_ndx, val_dl)
                 self.log_metrics(epoch_ndx, 'val', valMetrics_t)
             else:
@@ -131,17 +137,18 @@ class Ranzcr:
     def training(self, epoch_ndx, train_dl):
         self.model.train()
         trnMetrics_g = torch.zeros(METRICS_SIZE,len(train_dl.dataset),device=self.device)
-        batch_iter = self.estimation(train_dl,desc_str=f"{epoch_ndx} Training",start_ndx=train_dl.num_workers)
         self.training_loss = 0.0
-        for batch_ndx, batch_tup in batch_iter:
+        for batch_ndx, batch_tup in enumerate(train_dl, 0):
             self.optimizer.zero_grad()
             loss = self.compute_batch_loss(batch_ndx,batch_tup,train_dl.batch_size,trnMetrics_g)
-            if batch_ndx % 6 == 5:
-                print(f"batch: {batch_ndx}")
+            if batch_ndx % 10 == 9:
+              print(f"Train: epoch: {epoch_ndx}, batch: {batch_ndx}, loss: {loss:.4f}")
             self.training_loss += loss
             loss.backward()
             self.optimizer.step()
-            print(f"epoch: {epoch_ndx}, loss: {self.training_loss/len(train_dl)}")
+        torch.save(self.model.state_dict(), 'drive/MyDrive/my_model/cnn_model.pth')
+        print('model was saved')
+        print(f"Train: epoch: {epoch_ndx}, loss: {self.training_loss/len(train_dl):.4f}\n")
         self.totalTrainingSamples_count += len(train_dl.dataset)
         return trnMetrics_g.to('cpu')
 
@@ -149,26 +156,23 @@ class Ranzcr:
         with torch.no_grad():
             self.model.eval()
             valMetrics_g = torch.zeros(METRICS_SIZE,len(val_dl.dataset),device=self.device)
-            batch_iter = self.estimation(val_dl,desc_str=f"{epoch_ndx} Validation ",start_ndx=val_dl.num_workers)
             self.val_loss = 0.0
-            for batch_ndx, batch_tup in batch_iter:
+            for batch_ndx, batch_tup in enumerate(val_dl, 0):
                 loss = self.compute_batch_loss(batch_ndx,batch_tup,val_dl.batch_size,valMetrics_g)
-                if batch_ndx % 6 == 5:
-                    print(f"batch: {batch_ndx}")
+                if batch_ndx % 10 == 9:
+                  print(f"Validation: epoch: {epoch_ndx}, batch: {batch_ndx}, loss: {loss:.4f}")
                 self.val_loss += loss
-            print(f"epoch: {epoch_ndx}, loss: {self.training_loss / len(val_dl)}")
+            print(f"Validation: epoch: {epoch_ndx}, loss: {self.val_loss/len(val_dl):.4f}\n")
         return valMetrics_g.to('cpu')
 
-    def compute_batch_loss(self, batch_ndx,batch_tup,batch_size,metrics_g):
+    def compute_batch_loss(self, batch_ndx, batch_tup, batch_size, metrics_g):
         input_t, cls_t, has_bool = batch_tup
         cls_t = torch.reshape(cls_t, (-1,))
         input_g = input_t.to(self.device,non_blocking=True)
         cls_g = cls_t.to(self.device,non_blocking=True)
-
         logits_g, probability_g = self.model(input_g)
-        loss_func = nn.CrossEntropyLoss(weight=self.class_weights,reduction='none')  # weight=self.class_weights,
+        loss_func = nn.CrossEntropyLoss(reduction='none') # ,weight=self.class_weights,
         loss_g = loss_func(logits_g, cls_g)
-
         start_ndx = batch_ndx * batch_size
         end_ndx = start_ndx + cls_g.size(0)
         metrics_g[METRICS_LABEL_NDX, start_ndx:end_ndx] = cls_g.detach()
@@ -248,32 +252,6 @@ class Ranzcr:
             else:
                 self.val_writer.add_scalar(key, value, self.totalTrainingSamples_count)
 
-    def estimation(self, iter, desc_str, start_ndx=0, print_ndx=4, backoff=None, iter_len=None):
-        if iter_len is None:
-            iter_len = len(iter)
-        if backoff is None:
-            backoff = 2
-            while backoff ** 7 < iter_len:
-                backoff *= 2
-        assert backoff >= 2
-        while print_ndx < start_ndx * backoff:
-            print_ndx *= backoff
-        print(f"{desc_str} ----/{iter_len}, starting")
-        start_ts = time.time()
-        for (current_ndx, item) in enumerate(iter):
-            yield (current_ndx, item)
-            if current_ndx == print_ndx:
-                duration_sec = ((time.time() - start_ts) / (current_ndx - start_ndx + 1) * (iter_len - start_ndx))
-                done_dt = datetime.datetime.fromtimestamp(start_ts + duration_sec)
-                done_td = datetime.timedelta(seconds=duration_sec)
-                print(f"{desc_str} {current_ndx:-4}/{iter_len}, "
-                      f"done at {str(done_dt).rsplit('.', 1)[0]}, "
-                      f"{str(done_td).rsplit('.', 1)[0]}")
-                print_ndx *= backoff
-            if current_ndx + 1 == start_ndx:
-                start_ts = time.time()
-        print(f"{desc_str} ----/{iter_len}, "
-              f"done at {str(datetime.datetime.now()).rsplit('.', 1)[0]}")
 
     def initTensorboardWriters(self):
         if self.trn_writer is None:
@@ -281,9 +259,8 @@ class Ranzcr:
             self.trn_writer = SummaryWriter(log_dir=log_dir + '-trn_cls-')
             self.val_writer = SummaryWriter(log_dir=log_dir + '-val_cls-')
 
-
+# %%
 if __name__ == '__main__':
     training = Ranzcr(args).main()
 # tensorboard --logdir=runs
 # %%
-
