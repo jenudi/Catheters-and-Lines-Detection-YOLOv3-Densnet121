@@ -1,4 +1,5 @@
-_this project is still under study and therefore may lack information_
+_* this project is still under study and therefore may lack information_
+_** you can scroll down to skip the description and see some results_
 
 ### Catheters and Lines Detection in Chest Radiographs using Yolo-v3 and Densenet121
 
