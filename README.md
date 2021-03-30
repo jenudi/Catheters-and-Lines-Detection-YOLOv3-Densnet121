@@ -68,6 +68,9 @@ YOLO (you only look once) is a family of object detection networks developed by 
 
 
 
+**References**
 
-
-
+1. W. Richard Webb, Charles B. Higgins - Thoracic Imaging Pulmonary and Cardiovascular Radiology
+2. https://www.kaggle.com/c/ranzcr-clip-catheter-line-classification
+3. Paul L. Marino MD  PhD  FCCM - Marino's The ICU Book
+4. Mohamed Elgendy - Deep Learning for Vision Systems
