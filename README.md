@@ -1,4 +1,6 @@
-_this project is still under study and therefore may lack information_
+_* this project is still under study and therefore may lack information_
+
+_** scroll down to skip the description and see some results_
 
 ### Catheters and Lines Detection in Chest Radiographs using Yolo-v3 and Densenet121
 
@@ -16,10 +18,12 @@ The gold standard for the confirmation of line and tube positions is chest radio
 
 #### Main Concepts
 
-Artificial Airways
+**Artificial Airways**
+
 Positive pressure ventilation is delivered through various plastic tubes that are passed into the trachea through the vocal cords (endotracheal tubes) or are inserted directly into the trachea (tracheostomy tubes).(3).
 
-**Endotracheal Tubes**
+**Endotracheal Tubes (ETT)**
+
 Mechanical ventilators require the use of an endotracheal tube. The tube's tip should be positioned several centimeters above the tracheal carina (the lower end of the trachea). The carina may be assumed to be near the level of the aortic arch's undersurface (Fig. 1, the figure was taken from (1)) or the level of the T4-T5 vertebral bodies. (1)
 
 ![Fig1](images/img1.jpg)
@@ -33,14 +37,17 @@ Placing an endotracheal tube too low usually results in its entering the right m
 A tube placed too high may lodge in the hypopharynx or larynx, resulting in poor ventilation or gastric distention. If the tube tip or cuff lies at the vocal cords' level, ulceration and scarring may lead to stricture.
 
 **Tracheostomy Tubes**
+
 A tracheostomy tube is placed if a patient requires chronic mechanical ventilation or for upper airway obstruction. The tube tip position relative to the carina is not critical because the tracheostomy stoma location determines this. 
 
-**Central Vein Catheter**
-Central venous catheters (CVC) used to measure central venous pressure or for intravenous infusion of fluids are often placed through percutaneous puncture of the internal jugular or subclavian veins. A catheter placed adequately should be in the superior vena cava (SVC). On chest radiographs, the first anterior intercostal space is the approximate site of the junction of the brachiocephalic veins (BCV) to form the SVC. Because many catheters have two or three lumens, each with a different orifice, the catheter tip should be as near to the azygos arch as possible (Fig. 3, the figure was taken from (1)).
+**Central Vein Catheter (CVC)**
+
+Central venous catheters used to measure central venous pressure or for intravenous infusion of fluids are often placed through percutaneous puncture of the internal jugular or subclavian veins. A catheter placed adequately should be in the superior vena cava (SVC). On chest radiographs, the first anterior intercostal space is the approximate site of the junction of the brachiocephalic veins (BCV) to form the SVC. Because many catheters have two or three lumens, each with a different orifice, the catheter tip should be as near to the azygos arch as possible (Fig. 3, the figure was taken from (1)).
 
 ![Fig3](images/img3.jpg)
 
 **YOLO-v3**
+
 YOLO (you only look once) is a family of object detection networks developed by Joseph Redmon. The YOLO family is designed for fast object detection, and it was among the first attempts to build a fast real-time object detector. It is one of the quicker object detection algorithms. YOLO makes the predictions over a limited number of bounding boxes by splitting the input into a grid of cells; each cell directly predicts a bounding box and object classification. A result is a large number of candidate bounding boxes that are consolidated into a final prediction using NMS (non-maximum suppression). (4)
 
 
@@ -49,18 +56,21 @@ YOLO (you only look once) is a family of object detection networks developed by 
 
 **First Results**
 
-![img1](images/1.png)
-![img2](images/2.png)
-![img3](images/3.png)
-![img4](images/4.png)
-![img5](images/5.png)
-![img6](images/6.png)
-![img7](images/7.png)
-![img8](images/8.png)
+![img1](images/result1.png)
+![img2](images/result2.png)
+![img3](images/result3.png)
+![img4](images/result4.png)
+![img5](images/result5.png)
+![img6](images/result6.png)
+![img7](images/result7.png)
+![img8](images/result8.png)
 
 
 
 
+**References**
 
-
-
+1. W. Richard Webb, Charles B. Higgins - Thoracic Imaging Pulmonary and Cardiovascular Radiology
+2. https://www.kaggle.com/c/ranzcr-clip-catheter-line-classification
+3. Paul L. Marino MD  PhD  FCCM - Marino's The ICU Book
+4. Mohamed Elgendy - Deep Learning for Vision Systems
