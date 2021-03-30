@@ -39,4 +39,4 @@ class Densenet(nn.Module):
 
 def clac_param(model):
   print(f"total parameters: {sum(p.numel() for p in model.parameters())}")
-  print(f"trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+  print(f"trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")import torch.nn as nn
