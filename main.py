@@ -1,17 +1,15 @@
 # Imports
-from preprocess import *
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 import torchvision.transforms as transforms
 import datetime
 from torch.utils.tensorboard import SummaryWriter
-from Densenet121 import Densenet, clac_param
-from args import *
+from Densenet121 import Densenet
 import os
 import torch.cuda
-clac_param(Densenet())
-args = ProArgs(img_size=224,batch_size = 150,num_epochs=30,model=Densenet(),learning_rate=0.0001, momentum=0.9)
+#clac_param(Densenet())
+args = ProArgs(img_size=224,batch_size = 150,num_epochs=30,model=Densenet(),learning_rate=0.0001)
 #python -m tensorboard.main --logdir=runs
 # %%
 
@@ -262,5 +260,4 @@ class Ranzcr:
 # %%
 if __name__ == '__main__':
     training = Ranzcr(args).main()
-# tensorboard --logdir=runs
-# %%
+
