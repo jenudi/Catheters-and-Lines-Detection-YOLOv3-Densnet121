@@ -20,7 +20,7 @@ The gold standard for the confirmation of line and tube positions is chest radio
 
 Positive pressure ventilation is delivered through various plastic tubes that are passed into the trachea through the vocal cords (endotracheal tubes) or are inserted directly into the trachea (tracheostomy tubes).(3).
 
-**Endotracheal Tubes**
+**Endotracheal Tubes (ETT)**
 
 Mechanical ventilators require the use of an endotracheal tube. The tube's tip should be positioned several centimeters above the tracheal carina (the lower end of the trachea). The carina may be assumed to be near the level of the aortic arch's undersurface (Fig. 1, the figure was taken from (1)) or the level of the T4-T5 vertebral bodies. (1)
 
@@ -38,9 +38,9 @@ A tube placed too high may lodge in the hypopharynx or larynx, resulting in poor
 
 A tracheostomy tube is placed if a patient requires chronic mechanical ventilation or for upper airway obstruction. The tube tip position relative to the carina is not critical because the tracheostomy stoma location determines this. 
 
-**Central Vein Catheter**
+**Central Vein Catheter (CVC)**
 
-Central venous catheters (CVC) used to measure central venous pressure or for intravenous infusion of fluids are often placed through percutaneous puncture of the internal jugular or subclavian veins. A catheter placed adequately should be in the superior vena cava (SVC). On chest radiographs, the first anterior intercostal space is the approximate site of the junction of the brachiocephalic veins (BCV) to form the SVC. Because many catheters have two or three lumens, each with a different orifice, the catheter tip should be as near to the azygos arch as possible (Fig. 3, the figure was taken from (1)).
+Central venous catheters used to measure central venous pressure or for intravenous infusion of fluids are often placed through percutaneous puncture of the internal jugular or subclavian veins. A catheter placed adequately should be in the superior vena cava (SVC). On chest radiographs, the first anterior intercostal space is the approximate site of the junction of the brachiocephalic veins (BCV) to form the SVC. Because many catheters have two or three lumens, each with a different orifice, the catheter tip should be as near to the azygos arch as possible (Fig. 3, the figure was taken from (1)).
 
 ![Fig3](images/img3.jpg)
 
