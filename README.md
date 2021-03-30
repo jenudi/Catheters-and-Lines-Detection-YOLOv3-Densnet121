@@ -1,6 +1,6 @@
 _this project is still under study and therefore may lack information_
 
-#### Catheters and Lines Detection in Chest Radiographs using Yolo-v3 and Densenet121
+### Catheters and Lines Detection in Chest Radiographs using Yolo-v3 and Densenet121
 
 Yonatan Jenudi, MD [linkedin](linkedin.com/in/yjenudi)
 
@@ -14,7 +14,7 @@ The first step in interpreting a patient's radiograph in the ICU (Intensive Care
 
 The gold standard for the confirmation of line and tube positions is chest radiographs (chest x-ray). However, a physician or radiologist must manually check these chest x-rays to verify that the lines and tubes are in the optimal position. Not only does this leave room for human error, but delays are also common as radiologists can be busy reporting other scans. Deep learning algorithms may be able to detect malpositioned catheters and lines automatically. Once alerted, clinicians can reposition or remove them to avoid life-threatening complications. (2)
 
-## Main Concepts
+#### Main Concepts
 
 Artificial Airways
 Positive pressure ventilation is delivered through various plastic tubes that are passed into the trachea through the vocal cords (endotracheal tubes) or are inserted directly into the trachea (tracheostomy tubes).(3).
