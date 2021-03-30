@@ -49,14 +49,14 @@ YOLO (you only look once) is a family of object detection networks developed by 
 
 **First Results**
 
-![img1](images/1.png)
-![img2](images/2.png)
-![img3](images/3.png)
-![img4](images/4.png)
-![img5](images/5.png)
-![img6](images/6.png)
-![img7](images/7.png)
-![img8](images/8.png)
+![img1](images/result1.png)
+![img2](images/result2.png)
+![img3](images/result3.png)
+![img4](images/result4.png)
+![img5](images/result5.png)
+![img6](images/result6.png)
+![img7](images/result7.png)
+![img8](images/result8.png)
 
 
 
