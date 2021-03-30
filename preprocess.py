@@ -1,40 +1,20 @@
-import cv2 as cv
-import torch
 import pandas as pd
 import numpy as np
-import imgaug.augmenters as iaa
 import random
 import ast
-import matplotlib.pyplot as plt
-
-
-def show(img):
-    plt.imshow(img)
-    plt.xticks([]), plt.yticks([])
-    plt.show()
-
-
-def get_indices(series):
-    cls0 = list(np.where(np.array(series) == 0))[0].tolist()
-    cls1 = list(np.where(np.array(series) == 1))[0].tolist()
-    cls2 = list(np.where(np.array(series) == 2))[0].tolist()
-    cls3 = list(np.where(np.array(series) == 3))[0].tolist()
-    random.shuffle(cls3)
-    indices = cls0 * 90 + cls1 * 6 + cls2 + cls3[:7300]
-    random.shuffle(indices)
-    return indices
+from PIL import Image, ImageFile
+import albumentations as A
+from albumentations.pytorch import ToTensor
+import math
 
 
 def split_data(df):
-    val_indexes = [index for index in range(len(df)) if index % 5 == 0]
-    test_indexes = [index for index in range(len(df)) if index % 6 == 0]
-    train = df.drop(index=val_indexes+test_indexes)
+    val_indexes = [index for index in range(len(df)) if index % 10 == 0]
+    train = df.drop(index=val_indexes)
     train.reset_index(drop=True,inplace=True)
     val = df.iloc[val_indexes,:]
     val.reset_index(drop=True,inplace=True)
-    test = df.iloc[test_indexes,:]
-    test.reset_index(drop=True,inplace=True)
-    return train.copy(),val.copy(),test.copy()
+    return train.copy(),val.copy()
 
 
 def check_for_leakage(df1, df2,args):
@@ -42,86 +22,80 @@ def check_for_leakage(df1, df2,args):
     patients_in_both_groups = set(patients_in_both_groups)
     leakage = (len(patients_in_both_groups) > 0)
     if leakage:
-        print('Found leakage, fixing leakage')
         leakage_index = [index for index, value in enumerate(df1[args.patients]) if value == list(patients_in_both_groups)[0]]
         df1.drop(leakage_index, inplace=True)
         df1.reset_index(drop=True,inplace=True)
     return df1,df2
 
 
-def normed_weights(df):
-    w = df['class'].value_counts().tolist()
-    return torch.FloatTensor([1 - (x / sum(w)) for x in w][::-1])
+def convert_to_yolo(df,index):
+    rows = 1500
+    cols = Image.open(df['path'][index]).size[0]
+    annot = df['data'][index]
+    cls = df['cls'][index]
+    if cls == 0:
+        y_list = list(annot[:,1])
+        x_list = list(annot[:,0])
+        left = True if (sum(x_list) / len(x_list)) < (cols // 2) else False # check the insertion direction of the CVC
+        x_sorted = sorted(x_list,reverse=left)[:len(x_list) // 2]
+        ax = x_sorted[0]
+        first_angle = 0.0
+        stop_inedx = len(x_sorted)
+        for i in range(1,len(x_sorted)):
+            dx = x_sorted[i] - ax
+            dy = y_list[x_list.index(x_sorted[i])] - y_list[x_list.index(ax)]
+            angle= abs(-math.degrees(math.atan2(dy, dx)))
+            if i == 1:
+                first_angle = angle
+            elif first_angle == 0.0:
+                first_angle = angle
+                continue
+            if i > 1 and (abs(first_angle - angle) > 2.5):
+                stop_inedx = i + 1
+                break
+        annot = np.array([[i,y_list[x_list.index(i)]] for i in x_sorted[:stop_inedx]])
+    bbox = (np.min(annot, axis=0)[0],np.min(annot, axis=0)[1],np.max(annot, axis=0)[0],np.max(annot, axis=0)[1])
+    x_min, y_min, x_max, y_max = bbox[:4]
+    y_min = 0 if y_min < 0 else y_min
+    x_min = 0 if x_min < 0 else x_min
+    y_max = rows if y_max > rows else y_max
+    x_max = cols if x_max > cols else x_max
+    bbox = (x_min,y_min,x_max,y_max,cls)
+    album = A.augmentations.bbox_utils.convert_bbox_to_albumentations(bbox, 'pascal_voc', rows, cols, check_validity=False)
+    yolo = A.augmentations.bbox_utils.convert_bbox_from_albumentations(album, 'yolo', rows, cols, check_validity=False)
+    try:
+        album = A.augmentations.bbox_utils.convert_bbox_to_albumentations(yolo, 'yolo', rows, cols, check_validity=True)
+    except ValueError:
+        yolo = []
+    return yolo
 
 
-def make_ett_data(args):
-    df = pd.read_csv(args.csv)
-    df[args.labels] = df[args.ett].values.tolist()
-    df.set_index(args.uid, inplace=True)
-    df_annot = pd.read_csv(args.csv_annotations)
-    df_annot = df_annot[df_annot[args.labels[:-1]].isin(args.ett)]
-    df_annot.set_index(args.uid, inplace=True)
-    df = pd.concat([df, df_annot], axis=1)
-    df.reset_index(inplace=True)
-    df[args.cls] = [i.index(1) if sum(i) == 1 else 3 for i in df[args.labels]]
-    df[args.annotations] = [np.array(ast.literal_eval(i))
-                                  if type(i) != float else [] for i in df[args.data]]
-    df.rename(columns={'index': 'path'}, inplace=True)
-    df.drop(args.all_labels + [args.swan_ganz] + ['label', 'labels','data'], axis=1, inplace=True)
-    df['has_bool'] = [1 if i in [0,1,2] else 0 for i in df[args.cls]]
-    df['path'] = [args.image_path + i + '.jpg' for i in df['path']]
-    assert df.notnull().all().all()
-    df.sort_values(args.cls).reset_index(drop=True,inplace=True)
+def start():
+    name2id = {'CVC': 0, 'ETT': 1, 'NGT': 2}
+    df = pd.read_csv('train_annotations.csv')
+    df['data'] = [np.array(ast.literal_eval(i)) for i in df['data']]
+    df.rename(columns={'StudyInstanceUID': 'path'}, inplace=True)
+    df['path'] = ['train/train/' + i + '.jpg' for i in df['path']]
+    df['cls'] = [name2id[i[:3]] if i[:3] in name2id.keys() else 3 for i in df['label']]
+    df.drop(df[df['cls'] == 3].index, inplace = True)
+    df.drop(df[df['cls'] == 2].index, inplace = True)
+    df['yolo'] = [convert_to_yolo(df,index) for index in range(len(df))]
+    index_to_drop = [index for index,value in enumerate(df['yolo']) if len(value) == 0]
+    df.drop(index_to_drop, inplace=True)
+    print(f"{len(index_to_drop)} were removed")
+    df.reset_index(drop=True,inplace=True)
+    df.sort_values(by='cls',inplace=True)
     return df
 
 
-def aug_img(img):
-    img = np.expand_dims(img, axis=0)
-    one = iaa.OneOf([
-                     iaa.Affine(rotate=(-10, 10),mode='constant'),
-                     iaa.ScaleX((0.7, 1.3)),
-                     iaa.ScaleY((0.9, 1.1)),
-                     iaa.PerspectiveTransform(scale=(0.01, 0.1)),
-                     ])
-    two = iaa.OneOf([
-                       iaa.GaussianBlur(sigma=(0.0, 3.0)),
-                        iaa.LinearContrast((0.4, 1.6)),
-                       ])
-    simetimes1 = iaa.Sometimes(0.25, iaa.Fliplr(1))
-    simetimes2 = iaa.Sometimes(0.5,two)
-    seq = iaa.Sequential([one,simetimes1,simetimes2],random_order=True)
-    images_aug = seq(images=img)
-    return images_aug[0]
+df = start()
 
-
-def start(args):
-    df = make_ett_data(args)
-    train,val,test = split_data(df)
-    train,val = check_for_leakage(train, val,args)
-    train,test = check_for_leakage(train, test,args)
-    val,test = check_for_leakage(val, test,args)
-    train.drop(args.patients,inplace=True,axis=1)
-    val.drop(args.patients,inplace=True,axis=1)
-    test.drop(args.patients,inplace=True,axis=1)
-    return train.values, val.values, test.values, normed_weights(train)
-
-
-def fill(path,aug=False):
-    img = cv.imread(path)
-    if aug:
-        img = aug_img(img)
-    img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    bin_img = img[0:2000, 700:-700]
-    _, bin_img = cv.threshold(bin_img, 120, 255, cv.THRESH_BINARY)
-    bin_img = cv.resize(bin_img,
-                    (int(bin_img.shape[1] * 0.20), int(bin_img.shape[0] * 0.20)),
-                    interpolation=cv.INTER_AREA)
-    temp_list = [sum(bin_img[:,j]) for j in range(bin_img.shape[1])]
-    temp_index = (5 * temp_list.index(max(temp_list))) + 700
-    img = img[100:1200,temp_index-550:temp_index+550]
-    img[:, :200] = 0
-    img[:, 900:] = 0
-    img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
-    return img
-
-
+train_set, val_set = split_data(df)
+cls0 = list(np.where(np.array(train_set['cls']) == 0))[0].tolist()
+random.shuffle(cls0)
+train_set.drop(cls0[3200:], inplace = True)
+train_set.reset_index(drop=True,inplace=True)
+print(train_set['cls'].value_counts())
+train_set = train_set.groupby('path',as_index=False).agg({'data': lambda x: tuple(x), 'yolo': lambda x: tuple(x), 'cls': lambda x: list(x)})
+val_set = val_set.groupby('path',as_index=False).agg({'data': lambda x: tuple(x), 'yolo': lambda x: tuple(x)})
+print(len(train_set)/len(val_set))
