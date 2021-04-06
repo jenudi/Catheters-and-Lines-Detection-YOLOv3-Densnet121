@@ -1,6 +1,6 @@
 _* scroll down to skip the description and see some results_
 
-_** this project is still under study and therefore may lack information_
+_** this project is still under study and therefore may lack information or code_
 
 
 
